@@ -1,0 +1,84 @@
+Part 1:
+
+	type => R-type if opcode == [100000], else I-type
+	
+	A)
+	WrEn => 0 if opcode = [111111, 010000,010001, 000111, 011111] else 1
+
+	B)
+	PC_sel => 1 if [opcode == [111111] or (opcode == [010000] and zero == 1) or (opcode == [010001] and zero == 0)], else 0
+	PC_LdEn => 1
+
+	C)
+	RF_B_sel => 0 if R-type, 1 if I-type
+	RF_WrData_sel => 0 if opcode != [000011,001111], 1 if opcode == [000011,001111]
+	Ext(1 downto 0) (στο συνεφακι, επιλογη αναμεσα ZeroFill (00) ή SignExtension (01) ή Shift16Bit (10)) => 
+		if opcode == [110010,110011] 	=> "00"
+		elseif opcode == [111001] 	  		  	=> "10"
+		else					   				=> "01"
+
+	D)
+	ALU_Bin_sel => 0 if R-type, 1 if I-type
+	ALU_func:
+	If R-type (opcode == 100000), ALU_func is determined by the last 4 bits of func:
+
+		ALU_func = instruction[3:0] == 0000 → ADD
+		ALU_func = instruction[3:0] == 0001 → SUB
+		ALU_func = instruction[3:0] == 0010 → AND
+		ALU_func = instruction[3:0] == 0011 → OR
+		ALU_func = instruction[3:0] == 0100 → NOT
+		ALU_func = instruction[3:0] == 1000 → SRA
+		ALU_func = instruction[3:0] == 1001 → SRL
+		ALU_func = instruction[3:0] == 1010 → SLL
+		ALU_func = instruction[3:0] == 1100 → ROL
+		ALU_func = instruction[3:0] == 1101 → ROR
+
+	If I-type (opcode != 100000), ALU_func is determined by the last 4 bits of opcode:
+
+		if (instruction[31:30] = "00")
+			ALU_func = 0000 -> AND
+		else:
+			ALU_func = instruction[31:26] == 000000 → ADD
+			ALU_func = instruction[31:26] == 111000 → ADD
+			ALU_func = instruction[31:26] == 111001 → ADD
+			ALU_func = instruction[31:26] == 110010 → AND
+			ALU_func = instruction[31:26] == 110011 → OR
+			ALU_func = instruction[31:26] == 010000 → SUB (beq)
+			ALU_func = instruction[31:26] == 010001 → SUB (bne)
+			ALU_func = instruction[31:26] == others → ADD (Default)
+
+	E)
+	
+	MEM_WrEn => 1 if opcode = [000111, 011111] else 0 
+	Β_OR_W => 1 if opcode = [000011, 000111] else 0
+	
+Part 2:
+
+Control Signals:
+	IorD (Instruction or Data, in case we have joint memory): 
+		IorD = 0 => PC as Addressing, for IF (here the memory is addressed by the PC) 
+		IorD = 1 => ALUOut as Addressing, for Load/Store Instructions (here the memory is addressed by the ALU_out)
+		    			  
+	PCSrc:
+		ALUResult => The direct output of the ALU in the current clock cycle (happens in one cycle, used as combinational component)
+		ALUOut => A register that stores the ALU output to be used in future stages
+			00 = ALUResult => PC + 4 (IF)
+			01 = ALUOut => PC + 4 + Immed
+			10 = Jump Addr => b 10 (direct branching)
+	PCWrite:
+		PCWrite = PC_LdEn = 1 (only in IF stage)
+Fetch:
+	1) IorD = 0 
+	2) ALUSrcA = 0  => Controls what input ALU is going to be receiving for A
+	3) ALUSrcB = 01 => Controls what input ALU is going to be receiving for B
+	ALUOp = 00 (Redundant when 2 different Memories)
+	PCSrc = 00
+	IRWrite = 1
+	PCWrite = PC_LdEn = 1 
+
+Stage Registers:	
+	IR	After Fetch	Holds: The instruction just fetched, write enable: IRWrite for the Instruction Register
+	A, B	After Decode	Contents of source registers (RF[A], RF[B]), write enable: RegWrite for Register File (shared between stage registers A and B and Register File)
+	ALUOut	After Execute	Result of ALU operation (e.g., address, result)
+	M	After Memory	Data just read from memory
+
